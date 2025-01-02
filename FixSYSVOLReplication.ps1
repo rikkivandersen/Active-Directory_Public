@@ -9,8 +9,8 @@
     and then proceeds to fix the replication issues by setting the appropriate attributes and
     forcing replication through the domain.
 
-.AUTHOR
-    Richard Vilhelm Andersen (@rikkivandersen)
+.NOTES
+    Author: Richard Vilhelm Andersen (@rikkivandersen)
     GitHub: https://github.com/rikkivandersen
     
 #>
