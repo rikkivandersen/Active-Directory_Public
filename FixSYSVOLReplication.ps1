@@ -1,5 +1,19 @@
-# PowerShell script to perform an authoritative synchronization of DFSR-replicated sysvol replication (like D4 for FRS)
+# .\FixSYSVOLReplication.ps1
 
+<# 
+.SYNOPSIS
+    This script performs an authoritative synchronization of DFSR-replicated SYSVOL replication.
+
+.DESCRIPTION
+    The script checks if DFSR replication is being used, backs up the SYSVOL folder on the PDC Emulator,
+    and then proceeds to fix the replication issues by setting the appropriate attributes and
+    forcing replication through the domain.
+
+.AUTHOR
+    Richard Vilhelm Andersen (@rikkivandersen)
+    GitHub: https://github.com/rikkivandersen
+    
+#>
 
 # Create log directory
 $logDir = "C:\temp\ReplFixLogs"
@@ -32,8 +46,8 @@ if ($localState.'Local State' -eq 3) {
     Write-Log "DFSR replication is being used"
 } else {
     Write-Log "FRS replication is being used. Consider migrating replication to DFSR."
+    exit 1
 }
-
 
 # Get all domain controllers
 $domainControllers = Get-ADDomainController -Filter *
