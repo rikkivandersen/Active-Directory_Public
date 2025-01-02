@@ -1,4 +1,6 @@
 # PowerShell script to perform an authoritative synchronization of DFSR-replicated sysvol replication (like D4 for FRS)
+
+
 # Create log directory
 $logDir = "C:\temp\ReplFixLogs"
 if (-Not (Test-Path $logDir)) {
@@ -16,12 +18,41 @@ function Write-Log {
     $logMessage | Out-File -FilePath "$logDir\ReplFixLog.txt" -Append
 }
 
+# Check if DFSR or FRS replication is being used. Exit with error code 1 if FRS is being used.
+# If DFSR is being used, continue with the script.
+# Define the registry path and subkey
+$regPath = "HKLM:\System\CurrentControlSet\Services\DFSR\Parameters\SysVols\Migrating Sysvols"
+$subKey = "Local State"
+
+# Get the value of the subkey
+$localState = Get-ItemProperty -Path $regPath -Name $subKey
+
+# Check if the subkey value is 3
+if ($localState.'Local State' -eq 3) {
+    Write-Log "DFSR replication is being used"
+} else {
+    Write-Log "FRS replication is being used. Consider migrating replication to DFSR."
+}
+
+
 # Get all domain controllers
 $domainControllers = Get-ADDomainController -Filter *
 
 # Define the domain and PDC Emulator
 $domain = (Get-ADDomain).DNSRoot
 $pdcEmulator = (Get-ADDomainController -Discover -Service "PrimaryDC").HostName
+
+# Backup SYSVOL folder on the PDC Emulator
+$backupDir = "C:\temp\SYSVOL_Backup"
+Invoke-Command -ComputerName $pdcEmulator -ScriptBlock {
+    $sourceDir = "C:\Windows\SYSVOL\domain"
+    $destinationDir = "C:\temp\SYSVOL_Backup"
+    if (-Not (Test-Path $destinationDir)) {
+        New-Item -Path $destinationDir -ItemType Directory
+    }
+    Copy-Item -Path $sourceDir -Destination $destinationDir -Recurse
+}
+Write-Log "SYSVOL folder backed up on $pdcEmulator to $backupDir"
 
 # Set the DFS Replication service startup type to "manual" on all domain controllers
 foreach ($dc in $domainControllers) {
