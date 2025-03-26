@@ -171,6 +171,7 @@ $regSettings
 Function Enable-TLS12 {
     Write-Host "Checking TLS 1.2 settings..."
     $tls12Enabled = $regSettings | Where-Object { $_.Name -eq "Enabled" -and $_.Value -eq 1 }
+    $tls12WasEnabled = $false
     if ($tls12Enabled) {
         Write-Host "TLS 1.2 is already enabled." -ForegroundColor Green
     } else {
@@ -183,6 +184,7 @@ Function Enable-TLS12 {
 
         # Enable TLS 1.2
         Write-Host "Enabling TLS 1.2..." -ForegroundColor Cyan
+        $tls12WasEnabled = $true
 
         If (-Not (Test-Path 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319')) {
             New-Item 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319' -Force | Out-Null
@@ -210,12 +212,24 @@ Function Enable-TLS12 {
 
         Write-Host "TLS 1.2 has been enabled. You must restart the Windows Server for the changes to take effect." -ForegroundColor Cyan
     }
+
+    if ($tls12WasEnabled) {
+        $restartChoice = Read-Host -Prompt "TLS 1.2 enabled. Do you want to restart the server now? (Y/N)"
+        if ($restartChoice -match "^[Yy]$") {
+            Write-Host "Restarting the server to apply TLS 1.2 changes..." -ForegroundColor Yellow
+            Restart-Computer -Force
+            exit
+        } elseif ($restartChoice -notmatch "^[Nn]$") {
+            Write-Host "Invalid input. Exiting the script." -ForegroundColor Red
+            exit
+        }
+    }
 }
 
 Enable-TLS12
 
 # Ask user if they want to proceed with installation
-$proceedWithInstall = Read-Host -Prompt "Do you want to run the installer now? (Y/N)"
+$proceedWithInstall = Read-Host -Prompt "Do you want to run the Azure AD Connect installer now? (Y/N)"
 if ($proceedWithInstall -notmatch "^[Yy]$") {
     Write-Host "Installation cancelled. You can run the installer manually from: $destinationPath" -ForegroundColor Yellow
     exit
