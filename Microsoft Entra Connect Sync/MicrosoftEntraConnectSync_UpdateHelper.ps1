@@ -57,7 +57,7 @@ if (-not (Test-Path -Path $destinationFolder)) {
 }
 
 # Check if the installer file already exists
-if (-not (Test-Path -Path $destinationPath -and (Get-Item $destinationPath).Length -gt 0)) {
+if (-not (Test-Path -Path $destinationPath) -or (Get-Item $destinationPath).Length -eq 0) {
     Write-Host "Installer file not found or is empty. Downloading the installer..." -ForegroundColor Yellow
 
     # Download the file with progress bar
