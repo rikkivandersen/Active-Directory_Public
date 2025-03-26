@@ -118,6 +118,18 @@ Write-Host ""
 Write-Host "This is essential for backup or rollback purposes." -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Yellow
 Write-Host ""
+
+# Ask if user wants to open Azure AD Connect
+$openADConnect = Read-Host -Prompt "Do you want to open Azure AD Connect now? (Y/N)"
+if ($openADConnect -match "^[Yy]$") {
+    $adConnectPath = "C:\Program Files\Microsoft Azure Active Directory Connect\AzureADConnect.exe"
+    if (Test-Path $adConnectPath) {
+        Start-Process -FilePath $adConnectPath
+    } else {
+        Write-Host "Azure AD Connect executable not found at expected location." -ForegroundColor Red
+    }
+}
+
 Read-Host -Prompt "Press Enter once you have exported the configuration"
 
 # Function to read TLS 1.2 related registry values
