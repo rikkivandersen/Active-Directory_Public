@@ -55,38 +55,91 @@ if ($userResponse -eq 'exit') {
     exit
 }
 
-# Function to get the installed version of Azure AD Connect
-Function Get-ADConnectVersion {
-    $products = Get-WmiObject -Class Win32_Product | Where-Object {
-        $_.Name -match "Microsoft Entra Connect Sync|Microsoft Azure AD Connect"
+# Function to retrieve installed version from registry
+function Get-InstalledAppVersion {
+    param (
+        [string]$appName
+    )
+
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $apps = Get-ChildItem -Path $path | ForEach-Object {
+                $app = Get-ItemProperty $_.PsPath
+                if ($app.DisplayName -eq $appName) { # Ensure exact match
+                    [PSCustomObject]@{
+                        Name    = $app.DisplayName
+                        Version = $app.DisplayVersion
+                    }
+                }
+            }
+            if ($apps) { return $apps }
+        }
     }
-    if ($products) {
-        # Select the latest version if multiple results are found
-        return ($products | Sort-Object Version -Descending | Select-Object -First 1).Version
-    } else {
-        return $null
-    }
+    return $null
 }
 
-# Check the installed version of Azure AD Connect
-$installedVersion = Get-ADConnectVersion
-if ($installedVersion) {
-    Write-Host "Installed version detected: $installedVersion" -ForegroundColor Green
-    Write-Host "Note: Older versions are called 'Microsoft Azure AD Connect', and newer versions are called 'Microsoft Entra Connect Sync'." -ForegroundColor Cyan
-    if ([version]$installedVersion -lt [version]"2.4.18.0") {
-        Write-Host "The installed version is lower than 2.4.18.0." -ForegroundColor Red
-        Write-Host "It is recommended to update to the latest version of Microsoft Entra Connect Sync." -ForegroundColor Yellow
-        $userChoice = Read-Host -Prompt "Do you want to continue with the script to download the latest version? (Y/N)"
+# Detect Microsoft Azure AD Connect
+$azureADConnect = Get-InstalledAppVersion -appName 'Microsoft Azure AD Connect'
+if ($azureADConnect) {
+    $installedVersion = ($azureADConnect | Sort-Object Version -Descending | Select-Object -First 1).Version
+    Write-Host "Detected: Microsoft Azure AD Connect - Version $installedVersion" -ForegroundColor Green
+
+    # Compare installed version with required version
+    $requiredVersion = [version]"2.4.18.0"
+    if ([version]$installedVersion -ge $requiredVersion) {
+        Write-Host "Microsoft Azure AD Connect is up to date. No update is required." -ForegroundColor Green
+    } else {
+        Write-Host "=============================================================" -ForegroundColor Red
+        Write-Host "WARNING: Installed version ($installedVersion) is OUTDATED!" -ForegroundColor Red
+        Write-Host "The required version is $requiredVersion or later." -ForegroundColor Red
+        Write-Host "=============================================================" -ForegroundColor Red
+        $userChoice = Read-Host -Prompt "Do you want to continue with the script to update to the latest version? (Y/N)"
         if ($userChoice -notmatch "^[Yy]$") {
             Write-Host "Exiting the script as per user choice." -ForegroundColor Red
             exit
         }
+    }
+    # Continue with the script instead of exiting
+}
+
+# Detect Microsoft Entra Connect Sync
+$entraConnect = Get-InstalledAppVersion -appName 'Microsoft Entra Connect Sync'
+if ($entraConnect) {
+    $installedVersion = ($entraConnect | Sort-Object Version -Descending | Select-Object -First 1).Version
+    Write-Host "Detected: Microsoft Entra Connect Sync - Version $installedVersion" -ForegroundColor Green
+
+    # Compare installed version with required version
+    $requiredVersion = [version]"2.4.18.0"
+    if ([version]$installedVersion -ge $requiredVersion) {
+        Write-Host "Microsoft Entra Connect Sync is up to date. No update is required." -ForegroundColor Green
+        exit
     } else {
-        Write-Host "Microsoft Entra Connect Sync is up to date." -ForegroundColor Green
+        Write-Host "=============================================================" -ForegroundColor Red
+        Write-Host "WARNING: Installed version ($installedVersion) is OUTDATED!" -ForegroundColor Red
+        Write-Host "The required version is $requiredVersion or later." -ForegroundColor Red
+        Write-Host "=============================================================" -ForegroundColor Red
+        $userChoice = Read-Host -Prompt "Do you want to continue with the script to update to the latest version? (Y/N)"
+        if ($userChoice -notmatch "^[Yy]$") {
+            Write-Host "Exiting the script as per user choice." -ForegroundColor Red
+            exit
+        }
+    }
+    # Continue with the script instead of exiting
+}
+
+# If neither application is installed
+if (-not $azureADConnect -and -not $entraConnect) {
+    Write-Host "Neither Microsoft Azure AD Connect nor Microsoft Entra Connect Sync is installed." -ForegroundColor Yellow
+    $userChoice = Read-Host -Prompt "Do you want to proceed with the installation? (Y/N)"
+    if ($userChoice -notmatch "^[Yy]$") {
+        Write-Host "Exiting the script as per user choice." -ForegroundColor Red
         exit
     }
-} else {
-    Write-Host "Neither 'Microsoft Azure AD Connect' nor 'Microsoft Entra Connect Sync' is installed on this server." -ForegroundColor Yellow
 }
 
 # Set the download URL and destination path
@@ -278,14 +331,25 @@ if ($proceedWithInstall -notmatch "^[Yy]$") {
     Write-Host "Installation cancelled. You can run the installer manually from: $destinationPath" -ForegroundColor Yellow
     exit
 }
+
 # Run the Azure AD Connect installer
 Write-Host "Running the Azure AD Connect installer..."
 Start-Process -FilePath $destinationPath -Wait
 
+# Wait for the upgrade wizard to finish
+Write-Host "Waiting for the Azure AD Connect upgrade wizard to complete..." -ForegroundColor Cyan
+Start-Sleep -Seconds 60  # Adjust the wait time as needed
+do {
+    $process = Get-Process -Name "AzureADConnect" -ErrorAction SilentlyContinue
+    if ($process) {
+        Start-Sleep -Seconds 10
+    }
+} while ($process)
+
 # Verify the installation
-$installedVersion = Get-ADConnectVersion
+$installedVersion = Get-InstalledAppVersion -appName 'Microsoft Entra Connect Sync'
 if ($installedVersion -ge [version]"2.4.18.0") {
-    Write-Host "Microsoft Entra Connect Sync has been successfully upgraded to version $installedVersion."
+    Write-Host "Microsoft Entra Connect Sync has been successfully upgraded to version $installedVersion." -ForegroundColor Green
 } else {
-    Write-Host "Upgrade failed. Please check the logs for more details."
+    Write-Host "Upgrade failed or the version is still outdated. Please check the logs for more details." -ForegroundColor Red
 }
