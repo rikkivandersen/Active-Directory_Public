@@ -225,6 +225,9 @@ if ($openADConnect -match "^[Yy]$") {
     } else {
         Write-Host "Azure AD Connect executable not found at expected location." -ForegroundColor Red
     }
+} else {
+    Write-Host "You chose not to open Azure AD Connect. Exiting the script." -ForegroundColor Yellow
+    exit
 }
 
 Read-Host -Prompt "Press Enter once you have exported the configuration"
