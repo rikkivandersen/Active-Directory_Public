@@ -1,4 +1,23 @@
 # NOTICE: Ensure you have access to a global administrator account
+
+# Check Windows Server version
+$osInfo = Get-WmiObject -Class Win32_OperatingSystem
+$osCaption = $osInfo.Caption
+$osVersion = [version]($osInfo.Version)
+
+Write-Host "Detected operating system: $osCaption (Version $($osInfo.Version))" -ForegroundColor Cyan
+
+# Windows Server 2016 is version 10.0.14393
+if ($osCaption -notlike "*Windows Server*" -or $osVersion -lt [version]"10.0.14393") {
+    Write-Host "This script requires Windows Server 2016 or later." -ForegroundColor Red
+    Write-Host "Current OS: $osCaption" -ForegroundColor Red
+    Write-Host "Script execution will now terminate." -ForegroundColor Red
+    exit
+}
+
+Write-Host "OS version check passed. Continuing with script execution." -ForegroundColor Green
+
+
 Write-Host "====================== IMPORTANT NOTICE ======================" -ForegroundColor Yellow
 Write-Host "Before running this script, ensure you have access to a global administrator account with valid credentials." -ForegroundColor Cyan
 Write-Host "Test signing in to the Entra admin portal to verify that the global admin account has the required permissions and the credentials are working." -ForegroundColor Cyan
