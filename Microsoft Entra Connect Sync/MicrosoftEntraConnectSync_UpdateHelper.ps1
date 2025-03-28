@@ -15,8 +15,33 @@ if ($osCaption -notlike "*Windows Server*" -or $osVersion -lt [version]"10.0.143
     exit
 }
 
-Write-Host "OS version check passed. Continuing with script execution." -ForegroundColor Green
+Write-Host "OS version check passed." -ForegroundColor Green
 
+# Check if current server is in staging mode
+Write-Host "Checking if this server is running in staging mode..." -ForegroundColor Cyan
+try {
+    # Use Get-ADSyncScheduler to determine staging mode status
+    $syncScheduler = Get-ADSyncScheduler -ErrorAction Stop
+    
+    if ($syncScheduler.StagingModeEnabled) {
+        Write-Host "==================== WARNING ====================" -ForegroundColor Red
+        Write-Host "This server is currently running in STAGING MODE!" -ForegroundColor Red
+        Write-Host "Changes made on this server will NOT be exported to Microsoft Entra ID." -ForegroundColor Red
+        Write-Host "This is typically used for testing configurations before applying them to production." -ForegroundColor Yellow
+        Write-Host "=================================================" -ForegroundColor Red
+        
+        $continueChoice = Read-Host -Prompt "Do you want to continue with the script anyway? (Y/N)"
+        if ($continueChoice -notmatch "^[Yy]$") {
+            Write-Host "Script execution terminated due to staging mode configuration." -ForegroundColor Yellow
+            exit
+        }
+    } else {
+        Write-Host "Server is running in normal mode (not staging)." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "Unable to determine staging mode status. Azure AD Connect Sync might not be installed yet." -ForegroundColor Yellow
+    Write-Host "Error: $_" -ForegroundColor Yellow
+}
 
 Write-Host "====================== IMPORTANT NOTICE ======================" -ForegroundColor Yellow
 Write-Host "Before running this script, ensure you have access to a global administrator account with valid credentials." -ForegroundColor Cyan
