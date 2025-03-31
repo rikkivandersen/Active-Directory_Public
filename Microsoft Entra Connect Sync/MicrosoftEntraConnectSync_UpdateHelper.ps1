@@ -1,3 +1,20 @@
+<#
+.SYNOPSIS
+    Helper script for updating Microsoft Entra Connect Sync (formerly Azure AD Connect).
+    
+.DESCRIPTION
+    This script facilitates the update process for Microsoft Entra Connect Sync by:
+    - Checking system requirements (OS version, .NET Framework)
+    - Detecting existing installation and version
+    - Enabling TLS 1.2 if needed
+    - Downloading and installing the latest version
+    - Verifying and handling staging mode configurations
+    
+.NOTES
+    Author: Richard Vilhelm Andersen
+    Version: 1.2
+#>
+
 # NOTICE: Ensure you have access to a global administrator account
 
 # Check Windows Server version
