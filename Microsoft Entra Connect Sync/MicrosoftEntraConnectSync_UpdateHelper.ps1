@@ -339,20 +339,5 @@ if ($proceedWithInstall -notmatch "^[Yy]$") {
 Write-Host "Running the Azure AD Connect installer..."
 Start-Process -FilePath $destinationPath -Wait
 
-# Wait for the upgrade wizard to finish
-Write-Host "Waiting for the Azure AD Connect upgrade wizard to complete..." -ForegroundColor Cyan
-Start-Sleep -Seconds 60  # Adjust the wait time as needed
-do {
-    $process = Get-Process -Name "AzureADConnect" -ErrorAction SilentlyContinue
-    if ($process) {
-        Start-Sleep -Seconds 10
-    }
-} while ($process)
 
-# Verify the installation
-$installedVersion = Get-InstalledAppVersion -appName 'Microsoft Entra Connect Sync'
-if ($installedVersion -ge [version]"2.4.18.0") {
-    Write-Host "Microsoft Entra Connect Sync has been successfully upgraded to version $installedVersion." -ForegroundColor Green
-} else {
-    Write-Host "Upgrade failed or the version is still outdated. Please check the logs for more details." -ForegroundColor Red
-}
+Write-Host "Please run this script again after the upgrade process has finished to verify the update was successful and confirm you're running the latest version." -ForegroundColor Cyan
