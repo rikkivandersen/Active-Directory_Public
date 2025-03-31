@@ -266,7 +266,6 @@ $regSettings += Get-ADSyncToolsTls12RegValue $regKey 'DisabledByDefault'
 
 $regSettings
 
-
 # Enable TLS 1.2 if needed
 Function Enable-TLS12 {
     Write-Host "Checking TLS 1.2 settings..."
@@ -310,23 +309,116 @@ Function Enable-TLS12 {
         New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -Name 'Enabled' -Value '1' -PropertyType 'DWord' -Force | Out-Null
         New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.2\Client' -Name 'DisabledByDefault' -Value '0' -PropertyType 'DWord' -Force | Out-Null
 
-        Write-Host "TLS 1.2 has been enabled. You must restart the Windows Server for the changes to take effect." -ForegroundColor Cyan
-    }
-
-    if ($tls12WasEnabled) {
-        $restartChoice = Read-Host -Prompt "TLS 1.2 enabled. Do you want to restart the server now? (Y/N)"
-        if ($restartChoice -match "^[Yy]$") {
-            Write-Host "Restarting the server to apply TLS 1.2 changes..." -ForegroundColor Yellow
-            Restart-Computer -Force
-            exit
-        } elseif ($restartChoice -notmatch "^[Nn]$") {
-            Write-Host "Invalid input. Exiting the script." -ForegroundColor Red
-            exit
-        }
+        Write-Host "TLS 1.2 has been enabled. A system restart is required." -ForegroundColor Cyan
+        $global:RebootNeeded = $true
     }
 }
 
 Enable-TLS12
+
+# Function to check .NET Framework version
+function Get-DotNetFrameworkVersion {
+    $release = Get-ItemPropertyValue -LiteralPath 'HKLM:SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -Name Release -ErrorAction SilentlyContinue
+    
+    if ($null -eq $release) {
+        return $null
+    }
+    
+    switch ($release) {
+        { $_ -ge 533320 } { return [PSCustomObject]@{ Version = '4.8.1 or later'; Release = $release } }
+        { $_ -ge 528040 } { return [PSCustomObject]@{ Version = '4.8'; Release = $release } }
+        { $_ -ge 461808 } { return [PSCustomObject]@{ Version = '4.7.2'; Release = $release } }
+        { $_ -ge 461308 } { return [PSCustomObject]@{ Version = '4.7.1'; Release = $release } }
+        { $_ -ge 460798 } { return [PSCustomObject]@{ Version = '4.7'; Release = $release } }
+        { $_ -ge 394802 } { return [PSCustomObject]@{ Version = '4.6.2'; Release = $release } }
+        { $_ -ge 394254 } { return [PSCustomObject]@{ Version = '4.6.1'; Release = $release } }
+        { $_ -ge 393295 } { return [PSCustomObject]@{ Version = '4.6'; Release = $release } }
+        { $_ -ge 379893 } { return [PSCustomObject]@{ Version = '4.5.2'; Release = $release } }
+        { $_ -ge 378675 } { return [PSCustomObject]@{ Version = '4.5.1'; Release = $release } }
+        { $_ -ge 378389 } { return [PSCustomObject]@{ Version = '4.5'; Release = $release } }
+        default { return [PSCustomObject]@{ Version = "Unknown ($release)"; Release = $release } }
+    }
+}
+
+# Function to install .NET Framework 4.7.2
+function Install-DotNetFramework472 {
+    Write-Host "Downloading .NET Framework 4.7.2 installer..." -ForegroundColor Cyan
+    $dotNetInstallerUrl = "https://go.microsoft.com/fwlink/?LinkId=825298"
+    $dotNetInstallerPath = "$env:TEMP\dotNetFx472.exe"
+    
+    try {
+        Invoke-WebRequest -Uri $dotNetInstallerUrl -OutFile $dotNetInstallerPath
+        Write-Host "Installing .NET Framework 4.7.2. This may take several minutes..." -ForegroundColor Yellow
+        Start-Process -FilePath $dotNetInstallerPath -ArgumentList "/q /norestart" -Wait
+        Write-Host ".NET Framework 4.7.2 installation complete. A system restart is required." -ForegroundColor Yellow
+        $global:RebootNeeded = $true
+    }
+    catch {
+        Write-Host "Failed to download or install .NET Framework 4.7.2: $_" -ForegroundColor Red
+        return $false
+    }
+    finally {
+        if (Test-Path $dotNetInstallerPath) {
+            Remove-Item -Path $dotNetInstallerPath -Force
+        }
+    }
+    return $true
+}
+
+# Get .NET Framework version information
+$dotNetFramework = Get-DotNetFrameworkVersion
+
+# Display .NET Framework version information and handle installation if needed
+$dotNet472Required = $false
+Write-Host "Checking .NET Framework version..." -ForegroundColor Cyan
+
+if ($dotNetFramework) {
+    Write-Host ".NET Framework Version: $($dotNetFramework.Version)" -ForegroundColor Cyan
+    
+    # Check if version is sufficient for Azure AD Connect
+    if ($dotNetFramework.Release -ge 461808) { # 4.7.2 or later
+        Write-Host ".NET Framework version is sufficient for Azure AD Connect." -ForegroundColor Green
+    } else {
+        Write-Host "WARNING: .NET Framework 4.7.2 or later is required for the latest version of Azure AD Connect." -ForegroundColor Yellow
+        $dotNet472Required = $true
+    }
+} else {
+    Write-Host ".NET Framework Version 4.5 or later not detected." -ForegroundColor Red
+    Write-Host "Azure AD Connect requires .NET Framework 4.5.1 or later." -ForegroundColor Red
+    $dotNet472Required = $true
+}
+
+# Prompt for .NET Framework installation if needed
+if ($dotNet472Required) {
+    $installDotNet = Read-Host -Prompt "Do you want to install .NET Framework 4.7.2 now? (Y/N)"
+    if ($installDotNet -match "^[Yy]$") {
+        $installSuccess = Install-DotNetFramework472
+        
+        if ($installSuccess) {
+            Write-Host "Please restart your system before continuing with Azure AD Connect installation." -ForegroundColor Yellow
+            $continue = Read-Host -Prompt "Continue with script anyway? (Y/N)"
+            if ($continue -notmatch "^[Yy]$") {
+                Write-Host "Script terminated. Please run the script again after restarting." -ForegroundColor Red
+                exit
+            }
+        }
+    } else {
+        Write-Host "Continuing without upgrading .NET Framework. This may affect Azure AD Connect functionality." -ForegroundColor Yellow
+    }
+}
+
+# After the .NET checks are done (just before asking to proceed with installation):
+if ($global:RebootNeeded) {
+    Write-Host "At least one change requires a reboot to complete." -ForegroundColor Yellow
+    $restartOption = Read-Host -Prompt "Do you want to restart now? (Y/N)"
+    if ($restartOption -match "^[Yy]$") {
+        Write-Host "Restarting system..." -ForegroundColor Yellow
+        Restart-Computer -Force
+        exit
+    } else {
+        Write-Host "Please remember to restart the system before continuing." -ForegroundColor Yellow
+    }
+}
 
 # Ask user if they want to proceed with installation
 $proceedWithInstall = Read-Host -Prompt "Do you want to run the Azure AD Connect installer now? (Y/N)"
@@ -338,6 +430,19 @@ if ($proceedWithInstall -notmatch "^[Yy]$") {
 # Run the Azure AD Connect installer
 Write-Host "Running the Azure AD Connect installer..."
 Start-Process -FilePath $destinationPath -Wait
+
+# Check if ADSync service is running and restart it if necessary
+$adSyncService = Get-Service -Name "ADSync" -ErrorAction SilentlyContinue
+if ($adSyncService) {
+    if ($adSyncService.Status -ne 'Running') {
+        Write-Host "Starting the ADSync service..." -ForegroundColor Yellow
+        Start-Service -Name "ADSync"
+    } else {
+        Write-Host "ADSync service is already running." -ForegroundColor Green
+    }
+} else {
+    Write-Host "ADSync service not found. It may not be installed." -ForegroundColor Red
+}
 
 
 Write-Host "Please run this script again after the upgrade process has finished to verify the update was successful and confirm you're running the latest version." -ForegroundColor Cyan
