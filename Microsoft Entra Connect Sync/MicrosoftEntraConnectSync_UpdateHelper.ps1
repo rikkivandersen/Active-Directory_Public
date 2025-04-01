@@ -242,12 +242,11 @@ if ($openADConnect -match "^[Yy]$") {
     } else {
         Write-Host "Azure AD Connect executable not found at expected location." -ForegroundColor Red
     }
+    
+    Read-Host -Prompt "Press Enter once you have exported the configuration"
 } else {
-    Write-Host "You chose not to open Azure AD Connect. Exiting the script." -ForegroundColor Yellow
-    exit
+    Write-Host "You chose not to open Azure AD Connect. Continuing with the script." -ForegroundColor Yellow
 }
-
-Read-Host -Prompt "Press Enter once you have exported the configuration"
 
 # Function to read TLS 1.2 related registry values
 Function Get-ADSyncToolsTls12RegValue {
