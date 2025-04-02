@@ -444,21 +444,76 @@ if ($proceedWithInstall -notmatch "^[Yy]$") {
 }
 
 # Run the Azure AD Connect installer
-Write-Host "Running the Azure AD Connect installer..."
-Start-Process -FilePath $destinationPath -Wait
+Write-Host "Running the Azure AD Connect installer..." -ForegroundColor Cyan
+$installerProcess = Start-Process -FilePath $destinationPath -PassThru
+
+Write-Host "Installer is running. Waiting for installation to complete..." -ForegroundColor Yellow
+Write-Host "Please follow the on-screen instructions in the Azure AD Connect wizard." -ForegroundColor Yellow
+
+# Monitor for AzureADConnect.exe process
+$setupComplete = $false
+while (-not $setupComplete) {
+    $azureAdConnectProcess = Get-Process -Name "AzureADConnect" -ErrorAction SilentlyContinue
+    
+    if ($azureAdConnectProcess) {
+        Write-Host "Azure AD Connect wizard is running. Please complete the configuration..." -ForegroundColor Cyan
+        $azureAdConnectProcess.WaitForExit()
+        Write-Host "Azure AD Connect wizard has completed." -ForegroundColor Green
+        $setupComplete = $true
+    }
+    
+    # Check if installer is still running
+    if (-not $setupComplete) {
+        try {
+            $installerRefresh = Get-Process -Id $installerProcess.Id -ErrorAction Stop
+            Start-Sleep -Seconds 5
+        } catch {
+            # Installer process has exited without showing the wizard
+            Write-Host "Installer has completed." -ForegroundColor Green
+            $setupComplete = $true
+        }
+    }
+}
+
+# Wait for 15 seconds after the process has closed
+Write-Host "Waiting 15 seconds for installation to finalize..." -ForegroundColor Yellow
+Start-Sleep -Seconds 15
+
+# Check installed version after installation
+Write-Host "Checking installed version..." -ForegroundColor Cyan
+$entraConnect = Get-InstalledAppVersion -appName 'Microsoft Entra Connect Sync'
+$azureADConnect = Get-InstalledAppVersion -appName 'Microsoft Azure AD Connect'
+
+if ($entraConnect) {
+    $installedVersion = ($entraConnect | Sort-Object Version -Descending | Select-Object -First 1).Version
+    Write-Host "Installation successful: Microsoft Entra Connect Sync - Version $installedVersion" -ForegroundColor Green
+} elseif ($azureADConnect) {
+    $installedVersion = ($azureADConnect | Sort-Object Version -Descending | Select-Object -First 1).Version
+    Write-Host "Installation successful: Microsoft Azure AD Connect - Version $installedVersion" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: Could not verify installation of Microsoft Entra Connect Sync." -ForegroundColor Red
+}
 
 # Check if ADSync service is running and restart it if necessary
 $adSyncService = Get-Service -Name "ADSync" -ErrorAction SilentlyContinue
 if ($adSyncService) {
+    Write-Host "Checking ADSync service status..." -ForegroundColor Cyan
     if ($adSyncService.Status -ne 'Running') {
         Write-Host "Starting the ADSync service..." -ForegroundColor Yellow
         Start-Service -Name "ADSync"
+        Start-Sleep -Seconds 5
+        $adSyncService.Refresh()
+        if ($adSyncService.Status -eq 'Running') {
+            Write-Host "ADSync service started successfully." -ForegroundColor Green
+        } else {
+            Write-Host "WARNING: Failed to start ADSync service." -ForegroundColor Red
+        }
     } else {
-        Write-Host "ADSync service is already running." -ForegroundColor Green
+        Write-Host "ADSync service is running correctly." -ForegroundColor Green
     }
 } else {
-    Write-Host "ADSync service not found. It may not be installed." -ForegroundColor Red
+    Write-Host "ADSync service not found. The installation may not have completed successfully." -ForegroundColor Red
 }
 
-
-Write-Host "Please run this script again after the upgrade process has finished to verify the update was successful and confirm you're running the latest version." -ForegroundColor Cyan
+Write-Host "`nInstallation process completed." -ForegroundColor Green
+Write-Host "IMPORTANT: Verify that synchronization is working properly by checking the synchronization status in the Entra admin portal." -ForegroundColor Yellow
